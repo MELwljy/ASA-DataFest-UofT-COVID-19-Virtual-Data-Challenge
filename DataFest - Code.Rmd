@@ -1,0 +1,133 @@
+---
+title: "DataFest - PiazzzzaHut"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, include=FALSE}
+library(tidyverse) # Modern data science library 
+library(plm)       # Panel data analysis library
+library(tseries)   # For timeseries analysis
+library(lmtest)    # For hetoroskedasticity analysis
+library(tidyr)
+library(REEMtree)
+library(rpart)
+library(maptree)
+library(TH.data)
+```
+
+# General Trend Graph
+
+```{r}
+covid <- read_csv("Data/daily.csv")
+covid_us <- read_csv("Data/us.csv")
+head(covid, 10)
+head(covid_us, 10)
+```
+<br>
+Confirmed and deaths cases in US states (data end in 6/4)
+<br>
+```{r}
+data = covid 
+
+p1 <- ggplot(data, aes(x=date)) +
+  geom_line(aes(y=log(positive), color='Confirmed'))+ 
+  geom_line(aes(y=log(death), color='Deaths')) +
+xlab('From Jan to June') + ylab('Count') +
+theme(legend.title=element_blank(), axis.text.x = element_text(angle=45, hjust=1)) +
+scale_color_manual(values = c('Confirmed' = 'brown',
+'Deaths' = 'black')) + facet_wrap(~state)
+
+plot1 <- p1 + labs(title=paste0('Number of Cases - 2020.06.04'))
+plot1
+```
+<br>
+Confirmed and deaths cases in US (data end in 6/4)
+<br>
+```{r}
+p2 <- ggplot(covid_us, aes(x=date)) +
+  geom_line(aes(y=cases, color='Confirmed'))+ 
+  geom_line(aes(y=deaths, color='Deaths')) +
+xlab('') + ylab('Count') +
+theme(legend.title=element_blank(), axis.text.x = element_text(angle=45, hjust=1)) +
+scale_color_manual(values = c('Confirmed' = 'brown',
+'Deaths' = 'black'))
+
+plot2 <- p2 + labs(title=paste0('Number of Cases - 2020.06.04'))
+plot2
+```
+
+# OLS/Fixed Effect/Random Effect Model for Panel Data
+
+```{r}
+mydata <- read.csv("Data/datafest_final_data.csv")
+mydata <- na.omit(mydata)
+head(mydata, 10)
+
+# Set data as panel data
+pdata <- pdata.frame(mydata, index=c("date","state"))
+f <- change_infection~stay_at_home_order+mask_mandates+travel_restrictions+restaurant_limit
+```
+<br>
+We can use plm to run a straightforward OLS regression on the entire panel, which is usually called a "pooled" model (all the years are pooled into a big data set and treated as separate observations). 
+<br>
+```{r}
+# Pooled OLS estimator
+pooling <- plm(f, data=pdata, model= "pooling")
+summary(pooling)
+```
+
+```{r}
+# Between estimator
+between <- plm(f, data=pdata, model= "between")
+summary(between)
+
+# First differences estimator
+firstdiff <- plm(f, data=pdata, model= "fd")
+summary(firstdiff)
+```
+
+```{r}
+# Fixed effects or within estimator
+fixed <- plm(f, data=pdata,index=c("date","state"), model= "within")
+summary(fixed)
+```
+<br>
+Since the p-value >0.05, fixed model is not suitable for parameters estimation.
+<br>
+```{r}
+#Random effects estimator
+random <- plm(f, data=pdata, index=c("date","state"),model= "random")
+summary(random)
+```
+<br>
+Model selection and comparison 
+<br>
+```{r}
+# LM test for random effects versus OLS
+plmtest(pooling,type=c("bp"))
+```
+
+# Decision Tree Learning for Panel Data
+
+```{r}
+fit <- rpart(f, method='anova', data=mydata)
+printcp(fit)
+pfit <- prune(fit,cp= fit$cptable[which.min(fit$cptable[,"xerror"]), "CP"])
+draw.tree(pfit)
+```
+
+
+
+
+
+
+
+
+
+
+
+
